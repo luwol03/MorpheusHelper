@@ -1,6 +1,9 @@
+import os
 import re
+from json import dumps
 from typing import Optional, List
 
+import requests
 from discord import Embed, Guild, Status, Game, Member, Message
 from discord import Role
 from discord.ext import commands, tasks
@@ -11,6 +14,7 @@ from models.allowed_invite import AllowedInvite
 from models.btp_role import BTPRole
 from models.settings import Settings
 from translations import translations
+from util import read_normal_message
 
 
 class InfoCog(Cog, name="Server Information"):
@@ -41,6 +45,27 @@ class InfoCog(Cog, name="Server Information"):
             status=Status.online, activity=Game(name=translations.profile_status[self.current_status])
         )
         self.current_status = (self.current_status + 1) % len(translations.profile_status)
+
+    @commands.command(name="bugreport", aliases=["bug", "b"])
+    async def bug_report(self, ctx: Context):
+        await ctx.send("Now send the full bug report in one message.")
+
+        content, files = await read_normal_message(self.bot, ctx.channel, ctx.author)
+        new_content = ctx.author.mention + " reported:\n" + content
+        data = {"username": ctx.author.display_name, "avatar_url": str(ctx.author.avatar_url), "content": new_content}
+        payload = {"payload_json": dumps(data)}
+        multipart = {}
+        for i, file in enumerate(files):
+            multipart[str(i)] = (file.filename, file.fp)
+
+        result = requests.post(os.environ["BUG_REPORT_URL"], data=payload, files=multipart)
+
+        try:
+            result.raise_for_status()
+        except requests.exceptions.HTTPError as err:
+            print(err)
+        else:
+            print("Payload delivered successfully, code {}.".format(result.status_code))
 
     @commands.group(name="server")
     @guild_only()
